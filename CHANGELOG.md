@@ -14,6 +14,27 @@
 > - 发布流程：`python _publish_v{版本号}_cos.py`（上传版本键 + 永久键 + 更新
 >   manifest + 端到端校验），脚本头部注释含本记录。
 
+## v5.5.59 — 2026-08-23
+
+### 修复：穿透开启即崩溃（0xc0000005）+ 自己软件全部点不了 + 点击仍穿透
+
+- **修复：穿透开启后进程崩溃（实机 crash.log：main.py:417 CreateWindowExW
+  访问冲突 0xc0000005）**。根因：主窗/提词窗两个拦截窗注册**同名**窗口类
+  "FctbPenetrateShieldW"，且 stop→restart 时旧类的 WndProc 回调闭包被
+  `_wndproc_ref` 覆盖后立即被 CPython GC 释放，但系统窗口类表仍指向该已释放
+  地址——第二次 CreateWindowExW 向旧回调分发创建消息 → 访问冲突闪退。
+  修复：每次 `_run` 递增唯一类名（FctbPenetrateShieldW{seq}），多实例与
+  restart 均各用各的回调；WndProc 整体异常兜底（ctypes 回调抛异常会触发
+  STATUS_FATAL_USER_CALLBACK 崩进程）。
+- **修复：穿透后"自己软件上面什么都点不了"**。根因：`jsapi_update_penetrate_region`
+  漏 expose 到主窗，前端 `reportPenetrateRegion` 静默 return，拦截窗一直
+  盖满整个窗口吃掉全部点击。修复：主窗 expose 补上该方法，前端 rect 正常
+  上报，拦截窗只盖逐字稿正文区，侧栏/顶栏/工具条照常可点。
+- **修复：穿透时点击仍能点到背后直播伴侣**。拦截窗每 tick（100ms）重 assert
+  TOPMOST + 目标窗压到下，直播伴侣即使置顶/抢回 z 序也会被拦截窗盖住。
+- 回归：`_tmp_shield_restart_test.py`（stop→restart×3 + 双实例并存 + 停A不
+  影响B）全 PASS；`_tmp_shield_e2e.py` 六项全 PASS；`main.py` 语法校验通过。
+
 ## v5.5.58 — 2026-08-23
 
 ### 修复：穿透拦截窗 Z 序/置顶缺陷（真机"点击仍能点到后面"）+ 崩溃风险点清理
